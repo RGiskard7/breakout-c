@@ -1,3 +1,14 @@
+/**
+ * @file types.h
+ * @brief Shared type definitions for the Breakout game.
+ *
+ * Defines direction enumeration and STATUS return values used across
+ * the codebase.
+ *
+ * Author: RGiskard7
+ * Date: 18/06/2026
+ */
+
 #ifndef TYPES_H
 #define TYPES_H
 
@@ -16,4 +27,4 @@ typedef enum {
     ERROR
 } STATUS;
 
-#endif
+#endif /* TYPES_H */

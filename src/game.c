@@ -1,3 +1,14 @@
+/**
+ * @file game.c
+ * @brief Implementation of the Game structure and its associated functions.
+ *
+ * Contains the core game logic, state machine, collision detection,
+ * and rendering for the Breakout game.
+ *
+ * Author: RGiskard7
+ * Date: 18/06/2026
+ */
+
 #include "game.h"
 #include "config.h"
 #include "paddle.h"
@@ -13,396 +24,678 @@
 #include <stdlib.h>
 #include <math.h>
 
+/**
+ * @struct _game
+ * @brief Main game structure containing all game components and state.
+ *
+ * Holds the display, timer, event queue, paddle, ball, brick grid,
+ * score, lives, and state machine variables.
+ */
 struct _game {
-    ALLEGRO_DISPLAY *display;
-    ALLEGRO_TIMER *timer;
-    ALLEGRO_EVENT_QUEUE *queue;
-    ALLEGRO_EVENT event;
-    ALLEGRO_FONT *font;
-    ALLEGRO_SAMPLE *snd_bounce;
-    ALLEGRO_SAMPLE *snd_break;
+  ALLEGRO_DISPLAY *display;                 ///< Main display
+  ALLEGRO_TIMER *timer;                     ///< Main game timer
+  ALLEGRO_EVENT_QUEUE *event_queue;         ///< Event queue
+  ALLEGRO_EVENT events;                     ///< Current event
+  ALLEGRO_FONT *font;                       ///< Font for text rendering
+  ALLEGRO_SAMPLE *snd_bounce;               ///< Paddle/wall bounce sound
+  ALLEGRO_SAMPLE *snd_break;                ///< Brick break sound
 
-    PADDLE *paddle;
-    BALL *ball;
-    BRICK *bricks[BRICK_COLS][BRICK_ROWS];
+  PADDLE *paddle;                           ///< Player paddle
+  BALL *ball;                               ///< Game ball
+  BRICK *bricks[BRICK_COLS][BRICK_ROWS];    ///< Brick grid
 
-    GAME_STATE state;
-    bool done;
-    bool draw;
+  GAME_STATE state;                         ///< Current game state
+  bool done;                                ///< Exit flag
+  bool draw;                                ///< Redraw needed flag
 
-    int total_bricks;
-    int bricks_destroyed;
-    int score;
-    int lives;
-    int title_timer;
-    int dead_timer;
-    bool space_was;
+  int total_bricks;                         ///< Active bricks remaining
+  int bricks_destroyed;                     ///< Total bricks destroyed
+  int score;                                ///< Player's score
+  int lives;                                ///< Remaining lives
+  int title_timer;                          ///< Timer for title screen blink
+  int dead_timer;                           ///< Timer between ball loss and respawn
+  bool space_was_down;                      ///< Previous space key state
 };
 
-static const float speed_stages[] = {BALL_SPEED_INIT, BALL_SPEED_1, BALL_SPEED_2, BALL_SPEED_3};
-static const int   speed_thresh[]  = {0, STAGE_1, STAGE_2, STAGE_3};
+// Speed stage lookup tables
+static const float _speed_stages[] = {BALL_SPEED_INIT, BALL_SPEED_1,
+                                       BALL_SPEED_2, BALL_SPEED_3};
+static const int   _speed_thresholds[] = {0, STAGE_1, STAGE_2, STAGE_3};
 
-// --- Function declarations ---
+// Function Declarations
 
-static STATUS game_reset_bricks(GAME *g);
-static STATUS game_reset_ball(GAME *g);
-static STATUS game_next_ball(GAME *g);
-static void   game_update_speed(GAME *g);
-static STATUS game_update_play(GAME *g, ALLEGRO_KEYBOARD_STATE *key);
-static STATUS game_colisions(GAME *g);
+static STATUS game_reset_bricks(GAME *game);            /**< Destroys + recreates all bricks */
+static STATUS game_reset_ball(GAME *game);              /**< Attaches ball to paddle */
+static STATUS game_next_ball(GAME *game);               /**< Handles ball loss and life count */
+static void   game_update_speed(GAME *game);            /**< Updates ball speed stage */
+static STATUS game_update_play(GAME *game, ALLEGRO_KEYBOARD_STATE *key);  /**< Playing state logic */
+static STATUS game_colisions(GAME *game);               /**< Ball vs brick collision */
 
-static STATUS game_print_bricks(GAME *g);
-static STATUS game_print_paddle(GAME *g);
-static STATUS game_print_ball(GAME *g);
-static STATUS game_print_hud(GAME *g);
-static STATUS game_print_title(GAME *g);
-static STATUS game_print_gameover(GAME *g);
-static STATUS game_print_win(GAME *g);
-static STATUS game_print_dead(GAME *g);
+static STATUS game_print_bricks(GAME *game);            /**< Renders all bricks */
+static STATUS game_print_paddle(GAME *game);            /**< Renders the paddle */
+static STATUS game_print_ball(GAME *game);              /**< Renders the ball */
+static STATUS game_print_hud(GAME *game);               /**< Renders score and lives */
+static STATUS game_print_title(GAME *game);             /**< Renders title screen */
+static STATUS game_print_gameover(GAME *game);          /**< Renders game over screen */
+static STATUS game_print_win(GAME *game);               /**< Renders win screen */
+static STATUS game_print_dead(GAME *game);              /**< Renders ball lost overlay */
 
-// --- Create / Destroy / Init ---
+// =========================================================================
+// Functions: Game Creation and Destruction
+// =========================================================================
 
+/**
+ * @brief Creates and initializes a new game instance.
+ *
+ * Allocates memory for the GAME structure and sets all fields
+ * to their default values.
+ *
+ * @return Pointer to the new GAME instance or NULL if allocation fails.
+ */
 GAME *game_create(void) {
-    GAME *g = (GAME *)malloc(sizeof(GAME));
-    if (!g) return NULL;
+  GAME *new_game = NULL;
 
-    g->display = NULL;
-    g->timer = NULL;
-    g->queue = NULL;
-    g->font = NULL;
-    g->snd_bounce = NULL;
-    g->snd_break = NULL;
-    g->paddle = NULL;
-    g->ball = NULL;
+  new_game = (GAME *)malloc(sizeof(GAME));
+  if (!new_game) {
+    return NULL;
+  }
 
-    for (int c = 0; c < BRICK_COLS; c++)
-        for (int r = 0; r < BRICK_ROWS; r++)
-            g->bricks[c][r] = NULL;
+  new_game->display = NULL;
+  new_game->timer = NULL;
+  new_game->event_queue = NULL;
+  new_game->font = NULL;
+  new_game->snd_bounce = NULL;
+  new_game->snd_break = NULL;
+  new_game->paddle = NULL;
+  new_game->ball = NULL;
 
-    g->state = STATE_TITLE;
-    g->done = false;
-    g->draw = false;
-    g->total_bricks = 0;
-    g->bricks_destroyed = 0;
-    g->score = 0;
-    g->lives = MAX_LIVES;
-    g->title_timer = 0;
-    g->dead_timer = 0;
-    g->space_was = true;
-
-    return g;
-}
-
-STATUS game_init(GAME *g) {
-    if (!g) return ERROR;
-
-    g->timer = al_create_timer(1.0 / FPS);
-    if (!g->timer) return ERROR;
-
-    g->display = al_create_display(DISPLAY_WIDTH, DISPLAY_HEIGHT);
-    if (!g->display) return ERROR;
-    al_set_window_title(g->display, "Breakout");
-
-    g->queue = al_create_event_queue();
-    if (!g->queue) return ERROR;
-
-    al_register_event_source(g->queue, al_get_timer_event_source(g->timer));
-    al_register_event_source(g->queue, al_get_display_event_source(g->display));
-    al_register_event_source(g->queue, al_get_keyboard_event_source());
-
-    g->font = al_load_ttf_font(FONT_RSC, 18, 0);
-    g->snd_bounce = al_load_sample(SND_BOUNCE);
-    g->snd_break  = al_load_sample(SND_BREAK);
-
-    g->paddle = paddle_create();
-    if (!g->paddle) return ERROR;
-
-    g->ball = ball_create();
-    if (!g->ball) return ERROR;
-
-    if (game_reset_bricks(g) == ERROR) return ERROR;
-
-    return OK;
-}
-
-void game_destroy(GAME *g) {
-    if (!g) return;
-
-    for (int c = 0; c < BRICK_COLS; c++)
-        for (int r = 0; r < BRICK_ROWS; r++)
-            if (g->bricks[c][r]) brick_destroy(g->bricks[c][r]);
-
-    if (g->ball) ball_destroy(g->ball);
-    if (g->paddle) paddle_destroy(g->paddle);
-    if (g->snd_break) al_destroy_sample(g->snd_break);
-    if (g->snd_bounce) al_destroy_sample(g->snd_bounce);
-    if (g->font) al_destroy_font(g->font);
-    if (g->queue) al_destroy_event_queue(g->queue);
-    if (g->timer) al_destroy_timer(g->timer);
-    if (g->display) al_destroy_display(g->display);
-    free(g);
-}
-
-ALLEGRO_DISPLAY     *game_get_display(GAME *g) { return g ? g->display : NULL; }
-ALLEGRO_TIMER       *game_get_timer(GAME *g)   { return g ? g->timer : NULL; }
-ALLEGRO_EVENT_QUEUE *game_get_queue(GAME *g)    { return g ? g->queue : NULL; }
-ALLEGRO_EVENT       *game_get_event(GAME *g)    { return g ? &g->event : NULL; }
-bool                 game_is_done(GAME *g)      { return g ? g->done : true; }
-
-// --- Reset helpers ---
-
-static STATUS game_reset_bricks(GAME *g) {
-    if (!g) return ERROR;
-    for (int c = 0; c < BRICK_COLS; c++) {
-        for (int r = 0; r < BRICK_ROWS; r++) {
-            if (g->bricks[c][r]) brick_destroy(g->bricks[c][r]);
-            g->bricks[c][r] = brick_create(r, c);
-            if (!g->bricks[c][r]) return ERROR;
-        }
+  for (int c = 0; c < BRICK_COLS; c++) {
+    for (int r = 0; r < BRICK_ROWS; r++) {
+      new_game->bricks[c][r] = NULL;
     }
-    g->total_bricks = BRICK_TOTAL;
-    g->bricks_destroyed = 0;
-    return OK;
+  }
+
+  new_game->state = STATE_TITLE;
+  new_game->done = false;
+  new_game->draw = false;
+  new_game->total_bricks = 0;
+  new_game->bricks_destroyed = 0;
+  new_game->score = 0;
+  new_game->lives = MAX_LIVES;
+  new_game->title_timer = 0;
+  new_game->dead_timer = 0;
+  new_game->space_was_down = true;
+
+  return new_game;
 }
 
-static STATUS game_reset_ball(GAME *g) {
-    if (!g || !g->ball || !g->paddle) return ERROR;
-    ball_attach_to_paddle(g->ball, paddle_get_x(g->paddle));
-    g->space_was = true;
-    return OK;
-}
+/**
+ * @brief Destroys the game instance and frees all associated resources.
+ *
+ * Destroys bricks, ball, paddle, sounds, font, event queue, timer,
+ * display, and finally the GAME struct itself.
+ *
+ * @param game Pointer to the GAME instance to destroy.
+ */
+void game_destroy(GAME *game) {
+  if (!game) {
+    return;
+  }
 
-static STATUS game_next_ball(GAME *g) {
-    if (!g) return ERROR;
-    g->lives--;
-    if (g->lives <= 0) {
-        g->state = STATE_OVER;
-        return OK;
+  for (int c = 0; c < BRICK_COLS; c++) {
+    for (int r = 0; r < BRICK_ROWS; r++) {
+      if (game->bricks[c][r] != NULL) {
+        brick_destroy(game->bricks[c][r]);
+        game->bricks[c][r] = NULL;
+      }
     }
-    g->state = STATE_DEAD;
-    g->dead_timer = 0;
-    return OK;
+  }
+
+  if (game->ball) {
+    ball_destroy(game->ball);
+    game->ball = NULL;
+  }
+
+  if (game->paddle) {
+    paddle_destroy(game->paddle);
+    game->paddle = NULL;
+  }
+
+  if (game->snd_break) {
+    al_destroy_sample(game->snd_break);
+    game->snd_break = NULL;
+  }
+
+  if (game->snd_bounce) {
+    al_destroy_sample(game->snd_bounce);
+    game->snd_bounce = NULL;
+  }
+
+  if (game->font) {
+    al_destroy_font(game->font);
+    game->font = NULL;
+  }
+
+  if (game->event_queue) {
+    al_destroy_event_queue(game->event_queue);
+    game->event_queue = NULL;
+  }
+
+  if (game->timer) {
+    al_destroy_timer(game->timer);
+    game->timer = NULL;
+  }
+
+  if (game->display) {
+    al_destroy_display(game->display);
+    game->display = NULL;
+  }
+
+  free(game);
 }
 
-static void game_update_speed(GAME *g) {
-    if (!g) return;
-    int lvl = 0;
-    for (int s = 3; s >= 0; s--)
-        if (g->bricks_destroyed >= speed_thresh[s]) { lvl = s; break; }
-    ball_set_speed(g->ball, speed_stages[lvl]);
+// =========================================================================
+// Functions: Game Initialization
+// =========================================================================
+
+/**
+ * @brief Initializes the game: creates display, timer, queue, loads
+ * resources, and creates the paddle, ball, and bricks.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if initialization succeeds, ERROR if any setup fails.
+ */
+STATUS game_init(GAME *game) {
+  if (!game) {
+    return ERROR;
+  }
+
+  game->timer = al_create_timer(1.0 / FPS);
+  if (!game->timer) {
+    return ERROR;
+  }
+
+  game->display = al_create_display(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  if (!game->display) {
+    return ERROR;
+  }
+  al_set_window_title(game->display, "Breakout");
+
+  game->event_queue = al_create_event_queue();
+  if (!game->event_queue) {
+    return ERROR;
+  }
+
+  al_register_event_source(game->event_queue,
+      al_get_timer_event_source(game->timer));
+  al_register_event_source(game->event_queue,
+      al_get_display_event_source(game->display));
+  al_register_event_source(game->event_queue,
+      al_get_keyboard_event_source());
+
+  game->font = al_load_ttf_font(FONT_RSC, 18, 0);
+  game->snd_bounce = al_load_sample(SND_BOUNCE);
+  game->snd_break = al_load_sample(SND_BREAK);
+
+  game->paddle = paddle_create();
+  if (!game->paddle) {
+    return ERROR;
+  }
+
+  game->ball = ball_create();
+  if (!game->ball) {
+    return ERROR;
+  }
+
+  if (game_reset_bricks(game) == ERROR) {
+    return ERROR;
+  }
+
+  return OK;
 }
 
-// --- Update ---
+// =========================================================================
+// Functions: Accessors
+// =========================================================================
 
-STATUS game_update(GAME *g, ALLEGRO_KEYBOARD_STATE *key) {
-    if (!g || !key) return ERROR;
+ALLEGRO_DISPLAY *game_get_display(GAME *game) {
+  if (!game) { return NULL; }
+  return game->display;
+}
 
-    if (g->state != STATE_PLAY && al_key_down(key, ALLEGRO_KEY_ESCAPE)) {
-        g->done = true;
-        return OK;
+ALLEGRO_TIMER *game_get_timer(GAME *game) {
+  if (!game) { return NULL; }
+  return game->timer;
+}
+
+ALLEGRO_EVENT_QUEUE *game_get_queue(GAME *game) {
+  if (!game) { return NULL; }
+  return game->event_queue;
+}
+
+ALLEGRO_EVENT *game_get_event(GAME *game) {
+  if (!game) { return NULL; }
+  return &game->events;
+}
+
+bool game_is_done(GAME *game) {
+  if (!game) { return true; }
+  return game->done;
+}
+
+// =========================================================================
+// Functions: Brick and Ball Helpers
+// =========================================================================
+
+/**
+ * @brief Destroys all current bricks and recreates the full 10x6 grid.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if successful, ERROR on allocation failure.
+ */
+static STATUS game_reset_bricks(GAME *game) {
+  if (!game) return ERROR;
+
+  for (int c = 0; c < BRICK_COLS; c++) {
+    for (int r = 0; r < BRICK_ROWS; r++) {
+      if (game->bricks[c][r] != NULL) {
+        brick_destroy(game->bricks[c][r]);
+      }
+      game->bricks[c][r] = brick_create(r, c);
+      if (!game->bricks[c][r]) {
+        return ERROR;
+      }
     }
+  }
 
-    switch (g->state) {
+  game->total_bricks = BRICK_TOTAL;
+  game->bricks_destroyed = 0;
+
+  return OK;
+}
+
+/**
+ * @brief Attaches the ball to the paddle and resets the space key state.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if successful, ERROR if game, ball, or paddle is NULL.
+ */
+static STATUS game_reset_ball(GAME *game) {
+  if (!game || !game->ball || !game->paddle) return ERROR;
+
+  ball_attach_to_paddle(game->ball, paddle_get_x(game->paddle));
+  game->space_was_down = true;
+
+  return OK;
+}
+
+/**
+ * @brief Decrements lives after ball loss. Triggers game over or dead state.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if successful, ERROR if game is NULL.
+ */
+static STATUS game_next_ball(GAME *game) {
+  if (!game) return ERROR;
+
+  game->lives--;
+
+  if (game->lives <= 0) {
+    game->state = STATE_OVER;
+  } else {
+    game->state = STATE_DEAD;
+    game->dead_timer = 0;
+  }
+
+  return OK;
+}
+
+/**
+ * @brief Updates the ball speed stage based on bricks destroyed.
+ *
+ * Checks the current count against speed thresholds and sets the
+ * ball speed to the matching stage.
+ *
+ * @param game Pointer to the GAME instance.
+ */
+static void game_update_speed(GAME *game) {
+  if (!game) return;
+
+  int level = 0;
+  for (int s = 3; s >= 0; s--) {
+    if (game->bricks_destroyed >= _speed_thresholds[s]) {
+      level = s;
+      break;
+    }
+  }
+
+  ball_set_speed(game->ball, _speed_stages[level]);
+}
+
+// =========================================================================
+// Functions: Game Update
+// =========================================================================
+
+/**
+ * @brief Main update function for the game.
+ *
+ * Processes keyboard input and updates the state machine each frame.
+ *
+ * @param game Pointer to the GAME instance.
+ * @param key Pointer to the keyboard state.
+ * @return OK if update is successful, ERROR if game is NULL.
+ */
+STATUS game_update(GAME *game, ALLEGRO_KEYBOARD_STATE *key) {
+  if (!game || !key) {
+    return ERROR;
+  }
+
+  if (game->state != STATE_PLAY && al_key_down(key, ALLEGRO_KEY_ESCAPE)) {
+    game->done = true;
+    return OK;
+  }
+
+  switch (game->state) {
     case STATE_TITLE:
-        g->title_timer++;
-        if (al_key_down(key, ALLEGRO_KEY_ENTER)) {
-            g->state = STATE_PLAY;
-            g->score = 0;
-            g->lives = MAX_LIVES;
-            game_reset_bricks(g);
-            game_reset_ball(g);
-            paddle_set_x(g->paddle, PADDLE_INIT_X);
-        }
-        break;
+      game->title_timer++;
+      if (al_key_down(key, ALLEGRO_KEY_ENTER)) {
+        game->state = STATE_PLAY;
+        game->score = 0;
+        game->lives = MAX_LIVES;
+        game_reset_bricks(game);
+        game_reset_ball(game);
+        paddle_set_x(game->paddle, PADDLE_INIT_X);
+      }
+      break;
 
     case STATE_PLAY:
-        game_update_play(g, key);
-        break;
+      game_update_play(game, key);
+      break;
 
     case STATE_DEAD:
-        if (++g->dead_timer > 50) {
-            paddle_set_x(g->paddle, PADDLE_INIT_X);
-            game_reset_ball(g);
-            g->state = STATE_PLAY;
-        }
-        break;
+      game->dead_timer++;
+      if (game->dead_timer > 50) {
+        paddle_set_x(game->paddle, PADDLE_INIT_X);
+        game_reset_ball(game);
+        game->state = STATE_PLAY;
+      }
+      break;
 
     case STATE_OVER:
     case STATE_WIN:
-        if (al_key_down(key, ALLEGRO_KEY_ENTER))
-            g->state = STATE_TITLE;
-        break;
-    }
+      if (al_key_down(key, ALLEGRO_KEY_ENTER)) {
+        game->state = STATE_TITLE;
+      }
+      break;
+  }
 
-    g->draw = true;
-    return OK;
+  game->draw = true;
+  return OK;
 }
 
-static STATUS game_update_play(GAME *g, ALLEGRO_KEYBOARD_STATE *key) {
-    if (!g || !key) return ERROR;
+/**
+ * @brief Updates the game during the PLAY state.
+ *
+ * Handles paddle movement, ball launch, ball physics, wall and paddle
+ * bounces, ball loss, and brick collisions.
+ *
+ * @param game Pointer to the GAME instance.
+ * @param key Pointer to the keyboard state.
+ * @return OK if update is successful, ERROR on failure.
+ */
+static STATUS game_update_play(GAME *game, ALLEGRO_KEYBOARD_STATE *key) {
+  if (!game || !key) return ERROR;
 
-    if (al_key_down(key, ALLEGRO_KEY_LEFT))
-        paddle_move_left(g->paddle);
-    if (al_key_down(key, ALLEGRO_KEY_RIGHT))
-        paddle_move_right(g->paddle);
+  if (al_key_down(key, ALLEGRO_KEY_LEFT)) {
+    paddle_move_left(game->paddle);
+  }
+  if (al_key_down(key, ALLEGRO_KEY_RIGHT)) {
+    paddle_move_right(game->paddle);
+  }
 
-    bool sp = al_key_down(key, ALLEGRO_KEY_SPACE);
-    if (ball_is_serving(g->ball) && sp && !g->space_was)
-        ball_launch(g->ball);
-    g->space_was = sp;
+  bool space_down = al_key_down(key, ALLEGRO_KEY_SPACE);
+  if (ball_is_serving(game->ball) && space_down && !game->space_was_down) {
+    ball_launch(game->ball);
+  }
+  game->space_was_down = space_down;
 
-    float px = paddle_get_x(g->paddle);
-    ball_move(g->ball, px);
+  float px = paddle_get_x(game->paddle);
+  ball_move(game->ball, px);
 
-    if (!ball_is_serving(g->ball)) {
-        ball_bounce_wall(g->ball);
+  if (!ball_is_serving(game->ball)) {
+    ball_bounce_wall(game->ball);
 
-        if (ball_bounce_paddle(g->ball, px) == OK)
-            if (g->snd_bounce) al_play_sample(g->snd_bounce, 0.4f, 0, 1.2f, ALLEGRO_PLAYMODE_ONCE, NULL);
+    if (ball_bounce_paddle(game->ball, px) == OK) {
+      if (game->snd_bounce) {
+        al_play_sample(game->snd_bounce, 0.4f, 0.0f, 1.2f,
+                       ALLEGRO_PLAYMODE_ONCE, NULL);
+      }
+    }
 
-        if (ball_get_y(g->ball) > DISPLAY_HEIGHT) {
-            game_next_ball(g);
-            return OK;
+    if (ball_get_y(game->ball) > DISPLAY_HEIGHT) {
+      game_next_ball(game);
+      return OK;
+    }
+
+    if (game_colisions(game) == ERROR) {
+      return ERROR;
+    }
+  }
+
+  return OK;
+}
+
+/**
+ * @brief Checks for collisions between the ball and bricks.
+ *
+ * Iterates all alive bricks and tests AABB overlap against the ball.
+ * On collision, destroys the brick, updates score and speed,
+ * and bounces the ball on the correct axis.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if successful, ERROR if game is NULL.
+ */
+static STATUS game_colisions(GAME *game) {
+  if (!game) return ERROR;
+
+  float bx = ball_get_x(game->ball);
+  float by = ball_get_y(game->ball);
+  float cx = bx + BALL_SIZE / 2;
+  float cy = by + BALL_SIZE / 2;
+
+  for (int c = 0; c < BRICK_COLS; c++) {
+    for (int r = 0; r < BRICK_ROWS; r++) {
+      BRICK *brick = game->bricks[c][r];
+      if (!brick || !brick_is_alive(brick)) continue;
+
+      float rx = brick_get_x(brick);
+      float ry = brick_get_y(brick);
+      int rw = brick_get_width(brick);
+      int rh = brick_get_height(brick);
+
+      if (bx < rx + rw && bx + BALL_SIZE > rx &&
+          by < ry + rh && by + BALL_SIZE > ry) {
+
+        brick_hit(brick);
+        game->total_bricks--;
+        game->bricks_destroyed++;
+        game->score += brick_get_points(brick);
+
+        game_update_speed(game);
+
+        // Determine bounce axis from minimum overlap
+        float ol = (float)fabs(cx - rx);
+        float or = (float)fabs(rx + rw - cx);
+        float ot = (float)fabs(cy - ry);
+        float ob = (float)fabs(ry + rh - cy);
+        float min_x = (ol < or) ? ol : or;
+        float min_y = (ot < ob) ? ot : ob;
+
+        if (min_x < min_y) {
+          ball_bounce_x(game->ball);
+        } else {
+          ball_bounce_y(game->ball);
         }
 
-        if (game_colisions(g) == ERROR) return ERROR;
-    }
-
-    return OK;
-}
-
-static STATUS game_colisions(GAME *g) {
-    if (!g) return ERROR;
-
-    float bx = ball_get_x(g->ball);
-    float by = ball_get_y(g->ball);
-    int sz = BALL_SIZE;
-    float cx = bx + sz / 2, cy = by + sz / 2;
-
-    for (int c = 0; c < BRICK_COLS; c++) {
-        for (int r = 0; r < BRICK_ROWS; r++) {
-            BRICK *br = g->bricks[c][r];
-            if (!br || !brick_is_alive(br)) continue;
-
-            float rx = brick_get_x(br);
-            float ry = brick_get_y(br);
-            int rw = brick_get_width(br);
-            int rh = brick_get_height(br);
-
-            if (bx < rx + rw && bx + sz > rx && by < ry + rh && by + sz > ry) {
-                brick_hit(br);
-                g->total_bricks--;
-                g->bricks_destroyed++;
-                g->score += brick_get_points(br);
-
-                game_update_speed(g);
-
-                // Determine bounce axis: compare overlaps on each side
-                float ol = fabs(cx - rx);
-                float or = fabs(rx + rw - cx);
-                float ot = fabs(cy - ry);
-                float ob = fabs(ry + rh - cy);
-                float min_x = (ol < or) ? ol : or;
-                float min_y = (ot < ob) ? ot : ob;
-
-                if (min_x < min_y)
-                    ball_bounce_x(g->ball);
-                else
-                    ball_bounce_y(g->ball);
-
-                if (g->snd_break) al_play_sample(g->snd_break, 0.5f, 0, 1.0f, ALLEGRO_PLAYMODE_ONCE, NULL);
-
-                if (g->total_bricks <= 0) g->state = STATE_WIN;
-                return OK;
-            }
+        if (game->snd_break) {
+          al_play_sample(game->snd_break, 0.5f, 0.0f, 1.0f,
+                         ALLEGRO_PLAYMODE_ONCE, NULL);
         }
+
+        if (game->total_bricks <= 0) {
+          game->state = STATE_WIN;
+        }
+
+        return OK;
+      }
     }
-    return OK;
+  }
+
+  return OK;
 }
 
-// --- Render ---
+// =========================================================================
+// Functions: Rendering
+// =========================================================================
 
-STATUS game_render(GAME *g) {
-    if (!g || !g->draw) return ERROR;
+/**
+ * @brief Main render function to draw all game elements.
+ *
+ * Clears the screen, draws the playfield border, bricks, paddle, ball,
+ * HUD, and state-specific overlays.
+ *
+ * @param game Pointer to the GAME instance.
+ * @return OK if rendering is successful, ERROR if game is NULL
+ *         or draw flag is false.
+ */
+STATUS game_render(GAME *game) {
+  if (!game || !game->draw) {
+    return ERROR;
+  }
 
-    al_clear_to_color(al_map_rgb(10, 10, 30));
-    al_draw_rectangle(8, 8, DISPLAY_WIDTH - 8, DISPLAY_HEIGHT - 8,
-        al_map_rgb(255, 255, 255), 2);
+  al_clear_to_color(al_map_rgb(10, 10, 30));
+  al_draw_rectangle(8, 8, DISPLAY_WIDTH - 8, DISPLAY_HEIGHT - 8,
+      al_map_rgb(255, 255, 255), 2);
 
-    game_print_bricks(g);
-    if (g->state != STATE_TITLE) game_print_paddle(g);
-    if (!ball_is_serving(g->ball) || g->state == STATE_DEAD || g->state == STATE_PLAY)
-        game_print_ball(g);
-    game_print_hud(g);
+  game_print_bricks(game);
 
-    if (g->state == STATE_TITLE)  game_print_title(g);
-    if (g->state == STATE_OVER)   game_print_gameover(g);
-    if (g->state == STATE_WIN)    game_print_win(g);
-    if (g->state == STATE_DEAD)   game_print_dead(g);
+  if (game->state != STATE_TITLE) {
+    game_print_paddle(game);
+  }
 
-    al_flip_display();
-    g->draw = false;
-    return OK;
+  if (!ball_is_serving(game->ball) || game->state == STATE_DEAD ||
+      game->state == STATE_PLAY) {
+    game_print_ball(game);
+  }
+
+  game_print_hud(game);
+
+  if (game->state == STATE_TITLE)  game_print_title(game);
+  if (game->state == STATE_OVER)   game_print_gameover(game);
+  if (game->state == STATE_WIN)    game_print_win(game);
+  if (game->state == STATE_DEAD)   game_print_dead(game);
+
+  al_flip_display();
+  game->draw = false;
+
+  return OK;
 }
 
-static STATUS game_print_bricks(GAME *g) {
-    if (!g) return ERROR;
-    for (int c = 0; c < BRICK_COLS; c++)
-        for (int r = 0; r < BRICK_ROWS; r++)
-            brick_render(g->bricks[c][r]);
-    return OK;
+static STATUS game_print_bricks(GAME *game) {
+  if (!game) return ERROR;
+  for (int c = 0; c < BRICK_COLS; c++)
+    for (int r = 0; r < BRICK_ROWS; r++)
+      brick_print(game->bricks[c][r]);
+  return OK;
 }
 
-static STATUS game_print_paddle(GAME *g) {
-    return paddle_render(g->paddle);
+static STATUS game_print_paddle(GAME *game) {
+  return paddle_print(game->paddle);
 }
 
-static STATUS game_print_ball(GAME *g) {
-    return ball_render(g->ball);
+static STATUS game_print_ball(GAME *game) {
+  return ball_print(game->ball);
 }
 
-static STATUS game_print_hud(GAME *g) {
-    if (!g || !g->font) return OK;
-    char buf[32];
-    sprintf(buf, "SCORE: %d", g->score);
-    al_draw_text(g->font, al_map_rgb(255, 255, 255), 20, DISPLAY_HEIGHT - 30, 0, buf);
-    sprintf(buf, "LIVES: %d", g->lives);
-    al_draw_text(g->font, al_map_rgb(255, 255, 255), DISPLAY_WIDTH - 140, DISPLAY_HEIGHT - 30, 0, buf);
-    return OK;
+static STATUS game_print_hud(GAME *game) {
+  if (!game || !game->font) return ERROR;
+
+  char buf[32];
+  sprintf(buf, "SCORE: %d", game->score);
+  al_draw_text(game->font, al_map_rgb(255, 255, 255),
+               20, DISPLAY_HEIGHT - 30, 0, buf);
+
+  sprintf(buf, "LIVES: %d", game->lives);
+  al_draw_text(game->font, al_map_rgb(255, 255, 255),
+               DISPLAY_WIDTH - 140, DISPLAY_HEIGHT - 30, 0, buf);
+
+  return OK;
 }
 
-static STATUS game_print_title(GAME *g) {
-    if (!g || !g->font) return OK;
-    al_draw_filled_rectangle(130, 220, 470, 380, al_map_rgba(0, 0, 0, 200));
-    al_draw_text(g->font, al_map_rgb(0, 255, 0), DISPLAY_WIDTH / 2, 240, ALLEGRO_ALIGN_CENTER, "BREAKOUT");
-    al_draw_text(g->font, al_map_rgb(255, 255, 255), DISPLAY_WIDTH / 2, 300, ALLEGRO_ALIGN_CENTER, "PRESS ENTER TO START");
-    if ((g->title_timer / 30) % 2)
-        al_draw_text(g->font, al_map_rgb(255, 255, 0), DISPLAY_WIDTH / 2, 330, ALLEGRO_ALIGN_CENTER, "-> ENTER <-");
-    return OK;
+static STATUS game_print_title(GAME *game) {
+  if (!game || !game->font) return ERROR;
+
+  al_draw_filled_rectangle(130, 220, 470, 380,
+                           al_map_rgba(0, 0, 0, 200));
+
+  al_draw_text(game->font, al_map_rgb(0, 255, 0),
+               DISPLAY_WIDTH / 2, 240, ALLEGRO_ALIGN_CENTER,
+               "BREAKOUT");
+  al_draw_text(game->font, al_map_rgb(255, 255, 255),
+               DISPLAY_WIDTH / 2, 300, ALLEGRO_ALIGN_CENTER,
+               "PRESS ENTER TO START");
+
+  if ((game->title_timer / 30) % 2) {
+    al_draw_text(game->font, al_map_rgb(255, 255, 0),
+                 DISPLAY_WIDTH / 2, 330, ALLEGRO_ALIGN_CENTER,
+                 "-> ENTER <-");
+  }
+
+  return OK;
 }
 
-static STATUS game_print_gameover(GAME *g) {
-    if (!g || !g->font) return OK;
-    char buf[32];
-    al_draw_filled_rectangle(150, 240, 450, 360, al_map_rgba(0, 0, 0, 200));
-    al_draw_text(g->font, al_map_rgb(255, 0, 0), DISPLAY_WIDTH / 2, 270, ALLEGRO_ALIGN_CENTER, "GAME OVER");
-    sprintf(buf, "SCORE: %d", g->score);
-    al_draw_text(g->font, al_map_rgb(255, 255, 255), DISPLAY_WIDTH / 2, 310, ALLEGRO_ALIGN_CENTER, buf);
-    return OK;
+static STATUS game_print_gameover(GAME *game) {
+  if (!game || !game->font) return ERROR;
+
+  char buf[32];
+  al_draw_filled_rectangle(150, 240, 450, 360,
+                           al_map_rgba(0, 0, 0, 200));
+
+  al_draw_text(game->font, al_map_rgb(255, 0, 0),
+               DISPLAY_WIDTH / 2, 270, ALLEGRO_ALIGN_CENTER,
+               "GAME OVER");
+
+  sprintf(buf, "SCORE: %d", game->score);
+  al_draw_text(game->font, al_map_rgb(255, 255, 255),
+               DISPLAY_WIDTH / 2, 310, ALLEGRO_ALIGN_CENTER, buf);
+
+  return OK;
 }
 
-static STATUS game_print_win(GAME *g) {
-    if (!g || !g->font) return OK;
-    char buf[32];
-    al_draw_filled_rectangle(150, 240, 450, 360, al_map_rgba(0, 0, 0, 200));
-    al_draw_text(g->font, al_map_rgb(0, 255, 0), DISPLAY_WIDTH / 2, 270, ALLEGRO_ALIGN_CENTER, "YOU WIN!");
-    sprintf(buf, "SCORE: %d", g->score);
-    al_draw_text(g->font, al_map_rgb(255, 255, 255), DISPLAY_WIDTH / 2, 310, ALLEGRO_ALIGN_CENTER, buf);
-    return OK;
+static STATUS game_print_win(GAME *game) {
+  if (!game || !game->font) return ERROR;
+
+  char buf[32];
+  al_draw_filled_rectangle(150, 240, 450, 360,
+                           al_map_rgba(0, 0, 0, 200));
+
+  al_draw_text(game->font, al_map_rgb(0, 255, 0),
+               DISPLAY_WIDTH / 2, 270, ALLEGRO_ALIGN_CENTER,
+               "YOU WIN!");
+
+  sprintf(buf, "SCORE: %d", game->score);
+  al_draw_text(game->font, al_map_rgb(255, 255, 255),
+               DISPLAY_WIDTH / 2, 310, ALLEGRO_ALIGN_CENTER, buf);
+
+  return OK;
 }
 
-static STATUS game_print_dead(GAME *g) {
-    if (!g || !g->font) return OK;
-    al_draw_text(g->font, al_map_rgb(255, 0, 0), DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, ALLEGRO_ALIGN_CENTER, "BALL LOST!");
-    return OK;
+static STATUS game_print_dead(GAME *game) {
+  if (!game || !game->font) return ERROR;
+
+  al_draw_text(game->font, al_map_rgb(255, 0, 0),
+               DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2,
+               ALLEGRO_ALIGN_CENTER, "BALL LOST!");
+
+  return OK;
 }

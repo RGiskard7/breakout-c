@@ -1,3 +1,15 @@
+/**
+ * @file brick.h
+ * @brief Declaration of the Brick structure and its associated functions.
+ *
+ * Bricks form the destructible wall at the top of the screen.
+ * Each brick belongs to a specific row (colour and points) and
+ * is destroyed after a single hit.
+ *
+ * Author: RGiskard7
+ * Date: 18/06/2026
+ */
+
 #ifndef BRICK_H
 #define BRICK_H
 
@@ -6,20 +18,38 @@
 
 typedef struct _brick BRICK;
 
+/**
+ * @brief Creates a new brick at the given grid position.
+ *
+ * @param row Row index (0 = top, determines colour and points).
+ * @param col Column index (determines x position).
+ * @return Pointer to the created BRICK or NULL on allocation failure.
+ */
 BRICK *brick_create(int row, int col);
-void   brick_destroy(BRICK *b);
 
-bool   brick_is_alive(BRICK *b);
-STATUS brick_hit(BRICK *b);
-int    brick_get_row(BRICK *b);
-int    brick_get_col(BRICK *b);
-int    brick_get_points(BRICK *b);
+/**
+ * @brief Destroys the brick and frees allocated memory.
+ *
+ * @param brick Pointer to the BRICK to destroy.
+ */
+void brick_destroy(BRICK *brick);
 
-float  brick_get_x(BRICK *b);
-float  brick_get_y(BRICK *b);
-int    brick_get_width(BRICK *b);
-int    brick_get_height(BRICK *b);
+// State
+bool   brick_is_alive(BRICK *brick);
+STATUS brick_hit(BRICK *brick);
 
-void   brick_render(BRICK *b);
+// Properties
+int    brick_get_row(BRICK *brick);
+int    brick_get_col(BRICK *brick);
+int    brick_get_points(BRICK *brick);
 
-#endif
+// Position and dimensions
+float  brick_get_x(BRICK *brick);
+float  brick_get_y(BRICK *brick);
+int    brick_get_width(BRICK *brick);
+int    brick_get_height(BRICK *brick);
+
+// Rendering
+void brick_print(BRICK *brick);
+
+#endif /* BRICK_H */
