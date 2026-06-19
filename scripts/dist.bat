@@ -6,10 +6,10 @@ REM recursos. La carpeta resultante se puede comprimir y ejecutar en cualquier
 REM Windows 10/11 sin instalar Allegro ni MinGW.
 REM Autor: RGiskard7
 
-cd /d "%~dp0\..\.."
+cd /d "%~dp0\.."
 
 set "ALLEGRO_BIN=C:\allegro-5.2.9.1-mingw-14.1.0\bin"
-set "DIST=breakout\dist"
+set "DIST=dist"
 
 echo ===================================================
 echo        Empaquetando Breakout (dist)
@@ -19,7 +19,7 @@ echo.
 REM 1. Compilar primero
 set "PATH=C:\mingw64\bin;%PATH%"
 echo [INFO] Compilando...
-mingw32-make -f breakout\Makefile
+mingw32-make -f Makefile
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] La compilacion fallo.
     pause
@@ -33,7 +33,7 @@ mkdir "%DIST%\resources\fonts"
 mkdir "%DIST%\resources\sounds"
 
 REM 3. Copiar ejecutable y la DLL de Allegro
-copy "breakout\breakout.exe" "%DIST%\" >nul
+copy "breakout.exe" "%DIST%\" >nul
 if exist "%ALLEGRO_BIN%\allegro_monolith-5.2.dll" (
     copy "%ALLEGRO_BIN%\allegro_monolith-5.2.dll" "%DIST%\" >nul
 ) else (

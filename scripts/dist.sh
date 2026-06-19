@@ -8,23 +8,23 @@
 
 set -e
 
-cd "$(dirname "$0")/../.." || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
-DIST="breakout/dist"
+DIST="dist"
 
 echo "═══════════════════════════════════════════════════"
 echo "        Empaquetando Breakout (dist)"
 echo "═══════════════════════════════════════════════════"
 
 # 1. Compilar usando el script de build
-bash breakout/scripts/build.sh
+bash scripts/build.sh
 
 # 2. Preparar carpeta limpia
 rm -rf "$DIST"
 mkdir -p "$DIST/resources/fonts" "$DIST/resources/sounds"
 
 # 3. Copiar binario y solo los recursos que usa Breakout
-cp breakout/breakout "$DIST/"
+cp breakout "$DIST/"
 cp resources/fonts/space_invaders.ttf "$DIST/resources/fonts/"
 cp resources/sounds/shoot.wav "$DIST/resources/sounds/"
 cp resources/sounds/invaderkilled.wav "$DIST/resources/sounds/"

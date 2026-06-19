@@ -4,7 +4,7 @@ REM Script de compilacion para Breakout
 REM Usa el Makefile del proyecto y rutas manuales
 REM Autor: RGiskard7
 
-cd /d "%~dp0\..\.."
+cd /d "%~dp0\.."
 
 echo ===================================================
 echo        Compilando Breakout
@@ -31,8 +31,8 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo [INFO] Ejecutando mingw32-make -f breakout\Makefile...
-mingw32-make -f breakout\Makefile
+echo [INFO] Ejecutando mingw32-make -f Makefile...
+mingw32-make -f Makefile
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -47,15 +47,15 @@ echo.
 
 if "%1"=="run" (
     echo Iniciando juego...
-    REM El ejecutable necesita la DLL de Allegro junto a el (en breakout\)
-    if not exist "breakout\allegro_monolith-5.2.dll" (
+    REM El ejecutable necesita la DLL de Allegro junto a el (en la raiz)
+    if not exist "allegro_monolith-5.2.dll" (
         if exist "C:\allegro-5.2.9.1-mingw-14.1.0\bin\allegro_monolith-5.2.dll" (
-            copy "C:\allegro-5.2.9.1-mingw-14.1.0\bin\allegro_monolith-5.2.dll" breakout\ >nul
+            copy "C:\allegro-5.2.9.1-mingw-14.1.0\bin\allegro_monolith-5.2.dll" . >nul
             echo [INFO] DLL copiada.
         )
     )
 
-    breakout\breakout.exe
+    breakout.exe
 ) else (
     echo Para ejecutar: scripts\build.bat run
     echo Para empaquetar: scripts\dist.bat

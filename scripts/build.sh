@@ -6,8 +6,8 @@
 
 set -e  # Salir si hay errores
 
-# Cambiar al directorio raíz del proyecto (espacio compartido con Space Invaders)
-cd "$(dirname "$0")/../.." || exit 1
+# Cambiar al directorio raíz del proyecto
+cd "$(dirname "$0")/.." || exit 1
 
 # Colores
 RED='\033[0;31m'
@@ -57,7 +57,7 @@ print_success "Allegro 5 encontrado: v$(pkg-config --modversion allegro-5)"
 # Limpiar
 if [ "$1" == "clean" ]; then
     print_info "Limpiando archivos anteriores..."
-    rm -f breakout/src/*.o breakout/breakout
+    rm -f src/*.o breakout
     print_success "Limpieza completada"
     exit 0
 fi
@@ -65,27 +65,27 @@ fi
 # Compilar
 print_info "Compilando Breakout..."
 
-CFLAGS="-I breakout/include $(pkg-config --cflags allegro-5) -Wall -g"
+CFLAGS="-I include $(pkg-config --cflags allegro-5) -Wall -g"
 LIBS="$(pkg-config --libs allegro-5 allegro_main-5 allegro_primitives-5 allegro_font-5 allegro_ttf-5 allegro_image-5 allegro_audio-5 allegro_acodec-5)"
 
-gcc -c breakout/src/main.c   $CFLAGS -o breakout/src/main.o
-gcc -c breakout/src/game.c   $CFLAGS -o breakout/src/game.o
-gcc -c breakout/src/paddle.c $CFLAGS -o breakout/src/paddle.o
-gcc -c breakout/src/ball.c   $CFLAGS -o breakout/src/ball.o
-gcc -c breakout/src/brick.c  $CFLAGS -o breakout/src/brick.o
+gcc -c src/main.c   $CFLAGS -o src/main.o
+gcc -c src/game.c   $CFLAGS -o src/game.o
+gcc -c src/paddle.c $CFLAGS -o src/paddle.o
+gcc -c src/ball.c   $CFLAGS -o src/ball.o
+gcc -c src/brick.c  $CFLAGS -o src/brick.o
 
-gcc -o breakout/breakout \
-    breakout/src/main.o breakout/src/game.o breakout/src/paddle.o \
-    breakout/src/ball.o breakout/src/brick.o $LIBS
+gcc -o breakout \
+    src/main.o src/game.o src/paddle.o \
+    src/ball.o src/brick.o $LIBS
 
-print_success "Ejecutable creado: ./breakout/breakout"
-chmod +x breakout/breakout
+print_success "Ejecutable creado: ./breakout"
+chmod +x breakout
 
 if [ "$1" == "run" ]; then
     print_info "Iniciando Breakout..."
     echo ""
-    ./breakout/breakout
+    ./breakout
 else
     echo ""
-    print_info "Para ejecutar: ./breakout/scripts/build.sh run"
+    print_info "Para ejecutar: ./scripts/build.sh run"
 fi

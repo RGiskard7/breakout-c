@@ -11,8 +11,8 @@
 *.hex
 
 # Ejecutables
-SpaceInvaders
-SpaceInvaders.exe
+breakout
+breakout.exe
 
 # Archivos de debug
 *.dSYM/
