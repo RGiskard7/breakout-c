@@ -10,7 +10,7 @@ LIB_ALLEGRO=\lib
 INCLUDE_ALLEGRO=\include
 
 FLAGS=-I breakout/include -I $(PATH_ALLEGRO)$(INCLUDE_ALLEGRO) $(CFLAGS)
-LIBS=-L $(PATH_ALLEGRO)$(LIB_ALLEGRO) -lallegro_monolith -lallegro_main -lallegro_primitives -lallegro_font -lallegro_ttf -lallegro_audio -lallegro_acodec
+LIBS=-L $(PATH_ALLEGRO)$(LIB_ALLEGRO) -lallegro_monolith -lallegro_main -lallegro_primitives -lallegro_font -lallegro_ttf -lallegro_image -lallegro_audio -lallegro_acodec
 
 OBJS=breakout/src/main.o breakout/src/game.o breakout/src/paddle.o breakout/src/ball.o breakout/src/brick.o
 TARGET=breakout/breakout.exe

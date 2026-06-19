@@ -90,6 +90,8 @@ local_config.h
 *.zip
 *.rar
 *.7z
+dist/
+*.dll
 
 # Dependencias temporales
 deps/

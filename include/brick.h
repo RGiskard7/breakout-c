@@ -37,6 +37,7 @@ void brick_destroy(BRICK *brick);
 // State
 bool   brick_is_alive(BRICK *brick);
 STATUS brick_hit(BRICK *brick);
+STATUS brick_revive(BRICK *brick);
 
 // Properties
 int    brick_get_row(BRICK *brick);

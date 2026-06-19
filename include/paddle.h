@@ -18,7 +18,7 @@
 typedef struct _paddle PADDLE;
 
 /**
- * @brief Creates a new paddle at the default starting position.
+ * @brief Creates a new paddle.
  *
  * @return Pointer to the created PADDLE or NULL on allocation failure.
  */
@@ -63,6 +63,17 @@ int paddle_get_width(PADDLE *paddle);
  * @return The height, or 0 if paddle is NULL.
  */
 int paddle_get_height(PADDLE *paddle);
+
+/**
+ * @brief Sets the paddle width (used to halve it after a ceiling break).
+ *
+ * The paddle stays centred on itself and clamped inside the walls.
+ *
+ * @param paddle Pointer to the PADDLE.
+ * @param width New width in pixels.
+ * @return OK on success, ERROR if paddle is NULL.
+ */
+STATUS paddle_set_width(PADDLE *paddle, int width);
 
 /**
  * @brief Moves the paddle to the left, bounded by screen edge.
