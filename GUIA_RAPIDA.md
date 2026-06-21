@@ -49,7 +49,7 @@ scripts/build.sh run
 Faltan las librerias de audio. Revisa que `allegro_audio-5` y `allegro_acodec-5` esten instaladas.
 
 **No se ve nada o no carga la fuente/sonidos**  
-Ejecuta siempre desde la raiz del proyecto (`space-invaders-c/`). Breakout comparte la carpeta `resources/` con Space Invaders.
+Ejecuta siempre desde la raiz del proyecto (`breakout-c/`). Las fuentes y el sonido están en la carpeta `resources/`.
 
 **Falta `allegro_monolith-5.2.dll` al ejecutar**  
 `scripts\build.bat run` la copia sola. Para repartir el juego usa `scripts\dist.bat`.
